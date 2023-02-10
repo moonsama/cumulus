@@ -407,9 +407,10 @@ fn build_consensus(
 		// And a maximum of 750ms if slots are skipped
 		max_block_proposal_slot_portion: Some(SlotProportion::new(1f32 / 16f32)),
 		telemetry,
+		additional_digests_provider: (),
 	};
 
-	Ok(AuraConsensus::build::<sp_consensus_aura::sr25519::AuthorityPair, _, _, _, _, _, _>(params))
+	Ok(AuraConsensus::build::<sp_consensus_aura::sr25519::AuthorityPair, _, _, _, _, _, _, _>(params))
 }
 
 /// Start a parachain node.
