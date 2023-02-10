@@ -775,7 +775,7 @@ pub async fn start_rococo_parachain_node(
 				telemetry.clone(),
 			);
 
-			Ok(AuraConsensus::build::<sp_consensus_aura::sr25519::AuthorityPair, _, _, _, _, _, _>(
+			Ok(AuraConsensus::build::<sp_consensus_aura::sr25519::AuthorityPair, _, _, _, _, _, _, _>(
 				BuildAuraConsensusParams {
 					proposer_factory,
 					create_inherent_data_providers: move |_, (relay_parent, validation_data)| {
@@ -819,6 +819,7 @@ pub async fn start_rococo_parachain_node(
 					// And a maximum of 750ms if slots are skipped
 					max_block_proposal_slot_portion: Some(SlotProportion::new(1f32 / 16f32)),
 					telemetry,
+					additional_digests_provider: (),
 				},
 			))
 		},
@@ -1171,7 +1172,7 @@ where
 					telemetry2.clone(),
 				);
 
-				AuraConsensus::build::<<AuraId as AppKey>::Pair, _, _, _, _, _, _>(
+				AuraConsensus::build::<<AuraId as AppKey>::Pair, _, _, _, _, _, _, _>(
 					BuildAuraConsensusParams {
 						proposer_factory,
 						create_inherent_data_providers:
@@ -1217,6 +1218,7 @@ where
 						// And a maximum of 750ms if slots are skipped
 						max_block_proposal_slot_portion: Some(SlotProportion::new(1f32 / 16f32)),
 						telemetry: telemetry2,
+						additional_digests_provider: (),
 					},
 				)
 			})));
@@ -1545,7 +1547,7 @@ pub async fn start_contracts_rococo_node(
 				telemetry.clone(),
 			);
 
-			Ok(AuraConsensus::build::<sp_consensus_aura::sr25519::AuthorityPair, _, _, _, _, _, _>(
+			Ok(AuraConsensus::build::<sp_consensus_aura::sr25519::AuthorityPair, _, _, _, _, _, _, _>(
 				BuildAuraConsensusParams {
 					proposer_factory,
 					create_inherent_data_providers: move |_, (relay_parent, validation_data)| {
@@ -1588,6 +1590,7 @@ pub async fn start_contracts_rococo_node(
 					// And a maximum of 750ms if slots are skipped
 					max_block_proposal_slot_portion: Some(SlotProportion::new(1f32 / 16f32)),
 					telemetry,
+					additional_digests_provider: (),
 				},
 			))
 		},

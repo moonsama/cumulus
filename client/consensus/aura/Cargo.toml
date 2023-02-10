@@ -9,6 +9,8 @@ edition = "2021"
 async-trait = "0.1.63"
 codec = { package = "parity-scale-codec", version = "3.0.0", features = [ "derive" ] }
 futures = "0.3.25"
+futures-timer = "3.0.1"
+log = "0.4.17"
 tracing = "0.1.37"
 
 # Substrate
@@ -23,6 +25,7 @@ sp-block-builder = { git = "https://github.com/paritytech/substrate", branch = "
 sp-blockchain = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.38" }
 sp-consensus = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.38" }
 sp-consensus-aura = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.38" }
+sp-consensus-slots = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.38" }
 sp-core = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.38" }
 sp-inherents = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.38" }
 sp-keystore = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.38" }
