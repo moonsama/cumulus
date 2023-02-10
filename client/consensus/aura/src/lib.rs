@@ -37,14 +37,18 @@ use sp_api::ProvideRuntimeApi;
 use sp_application_crypto::AppPublic;
 use sp_blockchain::HeaderBackend;
 use sp_consensus::{EnableProofRecording, Environment, ProofRecording, Proposer, SyncOracle};
-use sp_consensus_aura::{AuraApi, SlotDuration};
+use sp_consensus_aura::{sr25519::AuthorityId as AuraId, AuraApi, SlotDuration};
 use sp_core::crypto::Pair;
 use sp_inherents::CreateInherentDataProviders;
 use sp_keystore::KeystorePtr;
 use sp_runtime::traits::{Block as BlockT, Header as HeaderT, Member, NumberFor};
 use std::{convert::TryFrom, marker::PhantomData, sync::Arc};
 
+mod digest_provider;
 mod import_queue;
+mod moonsama_aura_worker;
+
+use moonsama_aura_worker::{build_moonsama_aura_worker, BuildMoonsamaAuraWorkerParams};
 
 pub use import_queue::{build_verifier, import_queue, BuildVerifierParams, ImportQueueParams};
 pub use sc_consensus_aura::{slot_duration, AuraVerifier, BuildAuraWorkerParams, SlotProportion};
@@ -77,7 +81,7 @@ impl<B, CIDP, W> Clone for AuraConsensus<B, CIDP, W> {
 
 /// Parameters of [`AuraConsensus::build`].
 #[deprecated = "Use the `aura::collators::basic` collator instead"]
-pub struct BuildAuraConsensusParams<PF, BI, CIDP, Client, BS, SO> {
+pub struct BuildAuraConsensusParams<PF, BI, CIDP, Client, BS, SO, DP> {
 	pub proposer_factory: PF,
 	pub create_inherent_data_providers: CIDP,
 	pub block_import: BI,
@@ -90,6 +94,7 @@ pub struct BuildAuraConsensusParams<PF, BI, CIDP, Client, BS, SO> {
 	pub telemetry: Option<TelemetryHandle>,
 	pub block_proposal_slot_portion: SlotProportion,
 	pub max_block_proposal_slot_portion: Option<SlotProportion>,
+	pub additional_digests_provider: DP,
 }
 
 impl<B, CIDP> AuraConsensus<B, CIDP, ()>
@@ -101,7 +106,7 @@ where
 	/// Create a new boxed instance of AURA consensus.
 	#[allow(deprecated)]
 	#[deprecated = "Use the `aura::collators::basic` collator instead"]
-	pub fn build<P, Client, BI, SO, PF, BS, Error>(
+	pub fn build<P, Client, BI, SO, PF, BS, DP, Error>(
 		BuildAuraConsensusParams {
 			proposer_factory,
 			create_inherent_data_providers,
@@ -115,7 +120,8 @@ where
 			telemetry,
 			block_proposal_slot_portion,
 			max_block_proposal_slot_portion,
-		}: BuildAuraConsensusParams<PF, BI, CIDP, Client, BS, SO>,
+			additional_digests_provider,
+		}: BuildAuraConsensusParams<PF, BI, CIDP, Client, BS, SO, DP>,
 	) -> Box<dyn ParachainConsensus<B>>
 	where
 		Client:
@@ -132,12 +138,13 @@ where
 			Proof = <EnableProofRecording as ProofRecording>::Proof,
 		>,
 		Error: std::error::Error + Send + From<sp_consensus::Error> + 'static,
-		P: Pair + 'static,
-		P::Public: AppPublic + Member + Codec,
-		P::Signature: TryFrom<Vec<u8>> + Member + Codec,
+		P: Pair + 'static + Send + Sync,
+		P::Public: AppPublic + Hash + Member + Encode + Decode,
+		P::Signature: TryFrom<Vec<u8>> + Hash + Member + Encode + Decode,
+		DP: digest_provider::DigestsProvider<AuraId, <B as BlockT>::Hash> + Send + Sync + 'static,
 	{
-		let worker = sc_consensus_aura::build_aura_worker::<P, _, _, _, _, _, _, _, _>(
-			BuildAuraWorkerParams {
+		let worker = build_moonsama_aura_worker::<P, _, _, _, _, _, _, _, _, _>(
+			BuildMoonsamaAuraWorkerParams {
 				client: para_client,
 				block_import,
 				justification_sync_link: (),
@@ -149,6 +156,7 @@ where
 				telemetry,
 				block_proposal_slot_portion,
 				max_block_proposal_slot_portion,
+				additional_digests_provider: Arc::new(additional_digests_provider),
 				compatibility_mode: sc_consensus_aura::CompatibilityMode::None,
 			},
 		);
