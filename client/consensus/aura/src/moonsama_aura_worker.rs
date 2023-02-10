@@ -25,16 +25,14 @@ pub use sp_consensus_aura::{
 use sp_consensus_slots::Slot;
 use sp_core::crypto::{ByteArray, Pair, Public};
 
+use crate::{digest_provider, AuraId, LOG_TARGET};
 use sp_keystore::{SyncCryptoStore, SyncCryptoStorePtr};
 use sp_runtime::{
 	generic::BlockId,
 	traits::{Block as BlockT, Header, Member, NumberFor},
 	DigestItem,
 };
-
-use crate::AuraId;
-
-use crate::digest_provider;
+use tracing::error;
 
 type AuthorityId<P> = <P as Pair>::Public;
 
@@ -246,10 +244,8 @@ where
 		let slot = slot_info.slot;
 		let public_type_pair = claim.clone().to_public_crypto_pair();
 		let aura_id = AuraId::from_slice(&public_type_pair.1)
-		.map_err(
-			|e| error!(target: LOG_TARGET, error = ?e, "Invalid Aura ID (wrong length)."),
-		)
-		.ok()?;
+			.map_err(|e| error!(target: LOG_TARGET, error = ?e, "Invalid Aura ID (wrong length)."))
+			.ok()?;
 		let telemetry = self.telemetry();
 		let logging_target = self.logging_target();
 		let proposing_remaining_duration = self.proposing_remaining_duration(&slot_info);
