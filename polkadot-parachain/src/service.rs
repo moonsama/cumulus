@@ -777,7 +777,7 @@ pub async fn start_rococo_parachain_node(
 				telemetry.clone(),
 			);
 
-			Ok(AuraConsensus::build::<sp_consensus_aura::sr25519::AuthorityPair, _, _, _, _, _, _>(
+			Ok(AuraConsensus::build::<sp_consensus_aura::sr25519::AuthorityPair, _, _, _, _, _, _, _>(
 				BuildAuraConsensusParams {
 					proposer_factory,
 					create_inherent_data_providers: move |_, (relay_parent, validation_data)| {
@@ -1171,7 +1171,7 @@ where
 					telemetry2.clone(),
 				);
 
-				AuraConsensus::build::<<AuraId as AppKey>::Pair, _, _, _, _, _, _>(
+				AuraConsensus::build::<<AuraId as AppKey>::Pair, _, _, _, _, _, _, _>(
 					BuildAuraConsensusParams {
 						proposer_factory,
 						create_inherent_data_providers:
@@ -1548,7 +1548,7 @@ pub async fn start_contracts_rococo_node(
 				telemetry.clone(),
 			);
 
-			Ok(AuraConsensus::build::<sp_consensus_aura::sr25519::AuthorityPair, _, _, _, _, _, _>(
+			Ok(AuraConsensus::build::<sp_consensus_aura::sr25519::AuthorityPair, _, _, _, _, _, _, _>(
 				BuildAuraConsensusParams {
 					proposer_factory,
 					create_inherent_data_providers: move |_, (relay_parent, validation_data)| {
