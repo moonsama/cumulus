@@ -6,7 +6,6 @@ use std::{
 	marker::PhantomData,
 	pin::Pin,
 	sync::Arc,
-	time::{Instant},
 };
 
 use codec::{Codec, Decode, Encode};
@@ -239,7 +238,7 @@ where
 		proposer: Self::Proposer,
 		claim: &Self::Claim,
 		slot_info: SlotInfo<B>,
-		end_proposing_at: Instant,
+		proposing_remaining: Delay,
 	) -> Option<
 		Proposal<
 			B,
@@ -250,11 +249,9 @@ where
 		let slot = slot_info.slot;
 		let telemetry = self.telemetry();
 		let log_target = self.logging_target();
-		let proposing_remaining_duration =
-			end_proposing_at.saturating_duration_since(Instant::now());
+		let proposing_remaining_duration = self.proposing_remaining_duration(&slot_info);
 
-		let inherent_data =
-			Self::create_inherent_data(&slot_info, &log_target, end_proposing_at).await?;
+		let inherent_data = Self::create_inherent_data(&slot_info, &log_target).await?;
 
 		let public_type_pair = claim.clone().to_public_crypto_pair();
 		let aura_id = AuraId::from_slice(&public_type_pair.1)
@@ -281,7 +278,7 @@ where
 
 		let proposal = match futures::future::select(
 			proposing,
-			Delay::new(proposing_remaining_duration),
+			proposing_remaining,
 		)
 		.await
 		{
