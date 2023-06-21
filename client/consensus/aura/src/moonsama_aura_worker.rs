@@ -15,12 +15,12 @@ use futures_timer::Delay;
 use log::{info, warn};
 use sc_client_api::{backend::AuxStore, BlockOf};
 use sc_consensus::{BlockImport, BlockImportParams, ForkChoiceStrategy, StateAction};
-use sc_consensus_aura::{find_pre_digest, CompatibilityMode};
+use sc_consensus_aura::{find_pre_digest, CompatibilityMode, standalone as aura_internal};
 use sc_consensus_slots::{BackoffAuthoringBlocksStrategy, SlotInfo, StorageChanges};
 pub use sc_consensus_slots::{SimpleSlotWorker, SlotProportion};
 use sc_telemetry::{telemetry, TelemetryHandle, CONSENSUS_INFO};
 use sp_api::{Core, ProvideRuntimeApi};
-use sp_application_crypto::{AppKey, AppPublic};
+use sp_application_crypto::AppPublic;
 use sp_blockchain::HeaderBackend;
 pub use sp_consensus::SyncOracle;
 use sp_consensus::{BlockOrigin, Environment, Error as ConsensusError, Proposal, Proposer};
@@ -33,11 +33,8 @@ use sp_consensus_slots::Slot;
 use sp_core::crypto::{ByteArray, Pair, Public};
 
 use crate::{digest_provider, AuraId, LOG_TARGET};
-use sp_keystore::{SyncCryptoStore, SyncCryptoStorePtr};
-use sp_runtime::{
-	traits::{Block as BlockT, Header, Member, NumberFor},
-	DigestItem,
-};
+use sp_keystore::KeystorePtr;
+use sp_runtime::traits::{Block as BlockT, Header, Member, NumberFor};
 use tracing::error;
 
 type AuthorityId<P> = <P as Pair>::Public;
@@ -46,7 +43,7 @@ pub struct MoonsamaAuraWorker<C, E, I, P, SO, L, BS, N, DP> {
 	client: Arc<C>,
 	block_import: I,
 	env: E,
-	keystore: SyncCryptoStorePtr,
+	keystore: KeystorePtr,
 	sync_oracle: SO,
 	justification_sync_link: L,
 	force_authoring: bool,
@@ -116,23 +113,13 @@ where
 		&self,
 		_header: &B::Header,
 		slot: Slot,
-		epoch_data: &Self::AuxData,
+		authorities: &Self::AuxData,
 	) -> Option<Self::Claim> {
-		let expected_author = slot_author::<P>(slot, epoch_data);
-		expected_author.and_then(|p| {
-			if SyncCryptoStore::has_keys(
-				&*self.keystore,
-				&[(p.to_raw_vec(), sp_application_crypto::key_types::AURA)],
-			) {
-				Some(p.clone())
-			} else {
-				None
-			}
-		})
+		aura_internal::claim_slot::<P>(slot, authorities, &self.keystore).await
 	}
 
 	fn pre_digest_data(&self, slot: Slot, _claim: &Self::Claim) -> Vec<sp_runtime::DigestItem> {
-		vec![<DigestItem as CompatibleDigestItem<P::Signature>>::aura_pre_digest(slot)]
+		vec![aura_internal::pre_digest::<P>(slot)]
 	}
 
 	async fn block_import_params(
@@ -142,35 +129,13 @@ where
 		body: Vec<B::Extrinsic>,
 		storage_changes: StorageChanges<<Self::BlockImport as BlockImport<B>>::Transaction, B>,
 		public: Self::Claim,
-		_epoch: Self::AuxData,
+		_authorities: Self::AuxData,
 	) -> Result<
 		sc_consensus::BlockImportParams<B, <Self::BlockImport as BlockImport<B>>::Transaction>,
-		sp_consensus::Error,
+		ConsensusError,
 	> {
-		// sign the pre-sealed hash of the block and then
-		// add it to a digest item.
-		let public_type_pair = public.to_public_crypto_pair();
-		let public = public.to_raw_vec();
-		let signature = SyncCryptoStore::sign_with(
-			&*self.keystore,
-			<AuthorityId<P> as AppKey>::ID,
-			&public_type_pair,
-			header_hash.as_ref(),
-		)
-		.map_err(|e| sp_consensus::Error::CannotSign(public.clone(), e.to_string()))?
-		.ok_or_else(|| {
-			sp_consensus::Error::CannotSign(
-				public.clone(),
-				"Could not find key in keystore.".into(),
-			)
-		})?;
-		let signature = signature
-			.clone()
-			.try_into()
-			.map_err(|_| sp_consensus::Error::InvalidSignature(signature, public))?;
-
 		let signature_digest_item =
-			<DigestItem as CompatibleDigestItem<P::Signature>>::aura_seal(signature);
+			aura_internal::seal::<_, P>(header_hash, &public, &self.keystore)?;
 
 		let mut import_block = BlockImportParams::new(BlockOrigin::Own, header);
 		import_block.post_digests.push(signature_digest_item);
@@ -256,8 +221,7 @@ where
 		let inherent_data =
 			Self::create_inherent_data(&slot_info, &log_target, end_proposing_at).await?;
 
-		let public_type_pair = claim.clone().to_public_crypto_pair();
-		let aura_id = AuraId::from_slice(&public_type_pair.1)
+		let aura_id = AuraId::from_slice(&claim.as_slice())
 			.map_err(|e| error!(target: LOG_TARGET, error = ?e, "Invalid Aura ID (wrong length)."))
 			.ok()?;
 
@@ -275,7 +239,7 @@ where
 				inherent_data,
 				sp_runtime::generic::Digest { logs },
 				proposing_remaining_duration.mul_f32(0.98),
-				None,
+				slot_info.block_size_limit,
 			)
 			.map_err(|e| sp_consensus::Error::ClientImport(e.to_string()));
 
@@ -315,25 +279,6 @@ where
 
 		Some(proposal)
 	}
-}
-
-/// Get slot author for given block along with authorities.
-fn slot_author<P: Pair>(slot: Slot, authorities: &[AuthorityId<P>]) -> Option<&AuthorityId<P>> {
-	if authorities.is_empty() {
-		return None
-	}
-
-	let idx = *slot % (authorities.len() as u64);
-	assert!(
-		idx <= usize::MAX as u64,
-		"It is impossible to have a vector with length beyond the address space; qed",
-	);
-
-	let current_author = authorities.get(idx as usize).expect(
-		"authorities not empty; index constrained to list length;this is a valid index; qed",
-	);
-
-	Some(current_author)
 }
 
 fn authorities<A, B, C>(
@@ -393,7 +338,7 @@ pub struct BuildMoonsamaAuraWorkerParams<C, I, PF, SO, L, BS, N, DP> {
 	/// The backoff strategy when we miss slots.
 	pub backoff_authoring_blocks: Option<BS>,
 	/// The keystore used by the node.
-	pub keystore: SyncCryptoStorePtr,
+	pub keystore: KeystorePtr,
 	/// The proportion of the slot dedicated to proposing.
 	///
 	/// The block proposing will be limited to this proportion of the slot from the starting of the
