@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"mod":["foreign_creators","fungible_conversion","matching","runtime_api"],"type":["AssetIdForTrustBackedAssetsConvert","ForeignAssetsConvertedConcreteId","MultiLocationConvertedConcreteId","MultiLocationForAssetId","TrustBackedAssetsConvertedConcreteId"]};

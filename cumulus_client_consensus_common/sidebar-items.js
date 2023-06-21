@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["MAX_LEAVES_PER_LEVEL_SENSIBLE_DEFAULT"],"enum":["LevelLimit"],"fn":["run_parachain_consensus"],"mod":["import_queue"],"struct":["ParachainBlockImport","ParachainCandidate"],"trait":["ParachainBlockImportMarker","ParachainConsensus"]};
