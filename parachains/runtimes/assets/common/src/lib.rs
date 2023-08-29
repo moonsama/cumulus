@@ -17,6 +17,7 @@
 
 pub mod foreign_creators;
 pub mod fungible_conversion;
+pub mod local_and_foreign_assets;
 pub mod matching;
 pub mod runtime_api;
 
@@ -54,7 +55,8 @@ pub type MultiLocationConvertedConcreteId<MultiLocationFilter, Balance> =
 		JustTry,
 	>;
 
-/// [`MatchedConvertedConcreteId`] converter dedicated for storing `ForeignAssets` with `AssetId` as `MultiLocation`.
+/// [`MatchedConvertedConcreteId`] converter dedicated for storing `ForeignAssets` with `AssetId` as
+/// `MultiLocation`.
 ///
 /// Excludes by default:
 /// - parent as relay chain
@@ -67,13 +69,28 @@ pub type ForeignAssetsConvertedConcreteId<AdditionalMultiLocationExclusionFilter
 			// Excludes relay/parent chain currency
 			Equals<ParentLocation>,
 			// Here we rely on fact that something like this works:
-			// assert!(MultiLocation::new(1, X1(Parachain(100))).starts_with(&MultiLocation::parent()));
+			// assert!(MultiLocation::new(1,
+			// X1(Parachain(100))).starts_with(&MultiLocation::parent()));
 			// assert!(X1(Parachain(100)).starts_with(&Here));
 			StartsWith<LocalMultiLocationPattern>,
 			// Here we can exclude more stuff or leave it as `()`
 			AdditionalMultiLocationExclusionFilter,
 		)>,
 		Balance,
+	>;
+
+type AssetIdForPoolAssets = u32;
+/// `MultiLocation` vs `AssetIdForPoolAssets` converter for `PoolAssets`.
+pub type AssetIdForPoolAssetsConvert<PoolAssetsPalletLocation> =
+	AsPrefixedGeneralIndex<PoolAssetsPalletLocation, AssetIdForPoolAssets, JustTry>;
+/// [`MatchedConvertedConcreteId`] converter dedicated for `PoolAssets`
+pub type PoolAssetsConvertedConcreteId<PoolAssetsPalletLocation, Balance> =
+	MatchedConvertedConcreteId<
+		AssetIdForPoolAssets,
+		Balance,
+		StartsWith<PoolAssetsPalletLocation>,
+		AssetIdForPoolAssetsConvert<PoolAssetsPalletLocation>,
+		JustTry,
 	>;
 
 #[cfg(test)]

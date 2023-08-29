@@ -44,7 +44,7 @@ use frame_support::{
 	weights::Weight,
 	RuntimeDebug,
 };
-use frame_system::{ensure_none, ensure_root};
+use frame_system::{ensure_none, ensure_root, pallet_prelude::HeaderFor};
 use polkadot_parachain::primitives::RelayChainBlockNumber;
 use scale_info::TypeInfo;
 use sp_runtime::{
@@ -197,7 +197,7 @@ pub mod pallet {
 
 	#[pallet::hooks]
 	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
-		fn on_finalize(_: T::BlockNumber) {
+		fn on_finalize(_: BlockNumberFor<T>) {
 			<DidSetValidationCode<T>>::kill();
 			<UpgradeRestrictionSignal<T>>::kill();
 
@@ -229,7 +229,7 @@ pub mod pallet {
 			};
 
 			<PendingUpwardMessages<T>>::mutate(|up| {
-				let queue_size = relevant_messaging_state.relay_dispatch_queue_size;
+				let queue_size = relevant_messaging_state.relay_dispatch_queue_remaining_capacity;
 
 				let available_capacity = cmp::min(
 					queue_size.remaining_count,
@@ -281,7 +281,7 @@ pub mod pallet {
 			HrmpOutboundMessages::<T>::put(outbound_messages);
 		}
 
-		fn on_initialize(_n: T::BlockNumber) -> Weight {
+		fn on_initialize(_n: BlockNumberFor<T>) -> Weight {
 			let mut weight = Weight::zero();
 
 			// To prevent removing `NewValidationCode` that was set by another `on_initialize`
@@ -547,10 +547,12 @@ pub mod pallet {
 		Unauthorized,
 	}
 
-	/// In case of a scheduled upgrade, this storage field contains the validation code to be applied.
+	/// In case of a scheduled upgrade, this storage field contains the validation code to be
+	/// applied.
 	///
-	/// As soon as the relay chain gives us the go-ahead signal, we will overwrite the [`:code`][sp_core::storage::well_known_keys::CODE]
-	/// which will result the next block process with the new validation code. This concludes the upgrade process.
+	/// As soon as the relay chain gives us the go-ahead signal, we will overwrite the
+	/// [`:code`][sp_core::storage::well_known_keys::CODE] which will result the next block process
+	/// with the new validation code. This concludes the upgrade process.
 	#[pallet::storage]
 	#[pallet::getter(fn new_validation_function)]
 	pub(super) type PendingValidationCode<T: Config> = StorageValue<_, Vec<u8>, ValueQuery>;
@@ -714,11 +716,14 @@ pub mod pallet {
 	}
 
 	#[pallet::genesis_config]
-	#[derive(Default)]
-	pub struct GenesisConfig;
+	#[derive(frame_support::DefaultNoBound)]
+	pub struct GenesisConfig<T: Config> {
+		#[serde(skip)]
+		pub _config: sp_std::marker::PhantomData<T>,
+	}
 
 	#[pallet::genesis_build]
-	impl<T: Config> GenesisBuild<T> for GenesisConfig {
+	impl<T: Config> BuildGenesisConfig for GenesisConfig<T> {
 		fn build(&self) {
 			// TODO: Remove after https://github.com/paritytech/cumulus/issues/479
 			sp_io::storage::set(b":c", &[]);
@@ -868,8 +873,8 @@ impl<T: Config> Pallet<T> {
 
 	/// Process all inbound horizontal messages relayed by the collator.
 	///
-	/// This is similar to `Pallet::process_inbound_downward_messages`, but works on multiple inbound
-	/// channels.
+	/// This is similar to `Pallet::process_inbound_downward_messages`, but works on multiple
+	/// inbound channels.
 	///
 	/// **Panics** if either any of horizontal messages submitted by the collator was sent from
 	///            a para which has no open channel to this parachain or if after processing
@@ -985,7 +990,8 @@ impl<T: Config> Pallet<T> {
 	/// The implementation of the runtime upgrade functionality for parachains.
 	pub fn schedule_code_upgrade(validation_function: Vec<u8>) -> DispatchResult {
 		// Ensure that `ValidationData` exists. We do not care about the validation data per se,
-		// but we do care about the [`UpgradeRestrictionSignal`] which arrives with the same inherent.
+		// but we do care about the [`UpgradeRestrictionSignal`] which arrives with the same
+		// inherent.
 		ensure!(<ValidationData<T>>::exists(), Error::<T>::ValidationDataNotAvailable,);
 		ensure!(<UpgradeRestrictionSignal<T>>::get().is_none(), Error::<T>::ProhibitedByPolkadot);
 
@@ -1009,11 +1015,12 @@ impl<T: Config> Pallet<T> {
 
 	/// Returns the [`CollationInfo`] of the current active block.
 	///
-	/// The given `header` is the header of the built block we are collecting the collation info for.
+	/// The given `header` is the header of the built block we are collecting the collation info
+	/// for.
 	///
 	/// This is expected to be used by the
 	/// [`CollectCollationInfo`](cumulus_primitives_core::CollectCollationInfo) runtime api.
-	pub fn collect_collation_info(header: &T::Header) -> CollationInfo {
+	pub fn collect_collation_info(header: &HeaderFor<T>) -> CollationInfo {
 		CollationInfo {
 			hrmp_watermark: HrmpWatermark::<T>::get(),
 			horizontal_messages: HrmpOutboundMessages::<T>::get(),
@@ -1052,7 +1059,7 @@ impl<T: Config> Pallet<T> {
 	pub fn open_outbound_hrmp_channel_for_benchmarks(target_parachain: ParaId) {
 		RelevantMessagingState::<T>::put(MessagingStateSnapshot {
 			dmq_mqc_head: Default::default(),
-			relay_dispatch_queue_size: Default::default(),
+			relay_dispatch_queue_remaining_capacity: Default::default(),
 			ingress_channels: Default::default(),
 			egress_channels: vec![(
 				target_parachain,
@@ -1066,6 +1073,33 @@ impl<T: Config> Pallet<T> {
 				},
 			)],
 		})
+	}
+
+	/// Prepare/insert relevant data for `schedule_code_upgrade` for benchmarks.
+	#[cfg(feature = "runtime-benchmarks")]
+	pub fn initialize_for_set_code_benchmark(max_code_size: u32) {
+		// insert dummy ValidationData
+		let vfp = PersistedValidationData {
+			parent_head: polkadot_parachain::primitives::HeadData(Default::default()),
+			relay_parent_number: 1,
+			relay_parent_storage_root: Default::default(),
+			max_pov_size: 1_000,
+		};
+		<ValidationData<T>>::put(&vfp);
+
+		// insert dummy HostConfiguration with
+		let host_config = AbridgedHostConfiguration {
+			max_code_size,
+			max_head_data_size: 32 * 1024,
+			max_upward_queue_count: 8,
+			max_upward_queue_size: 1024 * 1024,
+			max_upward_message_size: 4 * 1024,
+			max_upward_message_num_per_candidate: 2,
+			hrmp_max_message_num_per_candidate: 2,
+			validation_upgrade_cooldown: 2,
+			validation_upgrade_delay: 2,
+		};
+		<HostConfiguration<T>>::put(host_config);
 	}
 }
 
@@ -1145,7 +1179,8 @@ pub trait CheckInherents<Block: BlockT> {
 pub trait OnSystemEvent {
 	/// Called in each blocks once when the validation data is set by the inherent.
 	fn on_validation_data(data: &PersistedValidationData);
-	/// Called when the validation code is being applied, aka from the next block on this is the new runtime.
+	/// Called when the validation code is being applied, aka from the next block on this is the new
+	/// runtime.
 	fn on_validation_code_applied();
 }
 
@@ -1168,8 +1203,8 @@ pub trait RelaychainStateProvider {
 	fn current_relay_chain_state() -> RelayChainState;
 }
 
-/// Implements [`BlockNumberProvider`] that returns relay chain block number fetched from validation data.
-/// When validation data is not available (e.g. within on_initialize), 0 will be returned.
+/// Implements [`BlockNumberProvider`] that returns relay chain block number fetched from validation
+/// data. When validation data is not available (e.g. within on_initialize), 0 will be returned.
 ///
 /// **NOTE**: This has been deprecated, please use [`RelaychainDataProvider`]
 #[deprecated = "Use `RelaychainDataProvider` instead"]
@@ -1211,9 +1246,10 @@ impl<T: Config> RelaychainStateProvider for RelaychainDataProvider<T> {
 	}
 }
 
-/// Implements [`BlockNumberProvider`] and [`RelaychainStateProvider`] that returns relevant relay data fetched from
-/// validation data.
-/// NOTE: When validation data is not available (e.g. within on_initialize), default values will be returned.
+/// Implements [`BlockNumberProvider`] and [`RelaychainStateProvider`] that returns relevant relay
+/// data fetched from validation data.
+/// NOTE: When validation data is not available (e.g. within on_initialize), default values will be
+/// returned.
 pub struct RelaychainDataProvider<T>(sp_std::marker::PhantomData<T>);
 
 impl<T: Config> BlockNumberProvider for RelaychainDataProvider<T> {

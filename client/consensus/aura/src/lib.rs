@@ -22,7 +22,7 @@
 //!
 //! For more information about AuRa, the Substrate crate should be checked.
 
-use codec::{Decode, Encode};
+use codec::Codec;
 use cumulus_client_consensus_common::{
 	ParachainBlockImportMarker, ParachainCandidate, ParachainConsensus,
 };
@@ -42,7 +42,10 @@ use sp_core::crypto::Pair;
 use sp_inherents::CreateInherentDataProviders;
 use sp_keystore::KeystorePtr;
 use sp_runtime::traits::{Block as BlockT, Header as HeaderT, Member, NumberFor};
-use std::{convert::TryFrom, hash::Hash, marker::PhantomData, sync::Arc};
+use std::{convert::TryFrom, marker::PhantomData, sync::Arc};
+
+use core::hash;
+use sp_application_crypto::AppCrypto;
 
 mod digest_provider;
 mod import_queue;
@@ -54,7 +57,9 @@ pub use import_queue::{build_verifier, import_queue, BuildVerifierParams, Import
 pub use sc_consensus_aura::{slot_duration, AuraVerifier, BuildAuraWorkerParams, SlotProportion};
 pub use sc_consensus_slots::InherentDataProviderExt;
 
-pub mod unstable_reimpl;
+pub mod collator;
+pub mod collators;
+pub mod equivocation_import_queue;
 
 const LOG_TARGET: &str = "aura::cumulus";
 
@@ -138,9 +143,10 @@ where
 			Proof = <EnableProofRecording as ProofRecording>::Proof,
 		>,
 		Error: std::error::Error + Send + From<sp_consensus::Error> + 'static,
-		P: Pair + Send + Sync,
-		P::Public: AppPublic + Hash + Member + Encode + Decode,
-		P::Signature: TryFrom<Vec<u8>> + Hash + Member + Encode + Decode,
+		P: Pair + 'static + Send + Sync,
+		P::Public: AppPublic + Member + Codec,
+		P::Signature: TryFrom<Vec<u8>> + hash::Hash + Member + Codec,
+		<AuraId as AppCrypto>::Pair: std::marker::Sync + std::marker::Send,
 		DP: digest_provider::DigestsProvider<AuraId, <B as BlockT>::Hash> + Send + Sync + 'static,
 	{
 		let worker = build_moonsama_aura_worker::<P, _, _, _, _, _, _, _, _, _>(
