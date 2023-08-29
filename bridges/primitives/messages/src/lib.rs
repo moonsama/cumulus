@@ -26,13 +26,13 @@ use bp_runtime::{
 	StorageProofError,
 };
 use codec::{Decode, Encode, MaxEncodedLen};
-use frame_support::{PalletError, RuntimeDebug};
+use frame_support::PalletError;
 // Weight is reexported to avoid additional frame-support dependencies in related crates.
 pub use frame_support::weights::Weight;
 use scale_info::TypeInfo;
 use serde::{Deserialize, Serialize};
 use source_chain::RelayersRewards;
-use sp_core::TypeId;
+use sp_core::{RuntimeDebug, TypeId};
 use sp_std::{collections::vec_deque::VecDeque, ops::RangeInclusive, prelude::*};
 
 pub mod source_chain;
@@ -384,6 +384,14 @@ impl Default for OutboundLaneData {
 			latest_received_nonce: 0,
 			latest_generated_nonce: 0,
 		}
+	}
+}
+
+impl OutboundLaneData {
+	/// Return nonces of all currently queued messages (i.e. messages that we believe
+	/// are not delivered yet).
+	pub fn queued_messages(&self) -> RangeInclusive<MessageNonce> {
+		(self.latest_received_nonce + 1)..=self.latest_generated_nonce
 	}
 }
 

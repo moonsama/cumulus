@@ -28,7 +28,7 @@ pub mod constants;
 mod weights;
 pub mod xcm_config;
 
-use constants::currency::*;
+use constants::{consensus::*, currency::*};
 use cumulus_pallet_parachain_system::RelayNumberStrictlyIncreases;
 use sp_api::impl_runtime_apis;
 use sp_core::{crypto::KeyTypeId, OpaqueMetadata};
@@ -146,7 +146,7 @@ pub const VERSION: RuntimeVersion = RuntimeVersion {
 	spec_name: create_runtime_str!("bridge-hub-rococo"),
 	impl_name: create_runtime_str!("bridge-hub-rococo"),
 	authoring_version: 1,
-	spec_version: 9430,
+	spec_version: 10000,
 	impl_version: 0,
 	apis: RUNTIME_API_VERSIONS,
 	transaction_version: 3,
@@ -299,6 +299,12 @@ impl cumulus_pallet_parachain_system::Config for Runtime {
 	type XcmpMessageHandler = XcmpQueue;
 	type ReservedXcmpWeight = ReservedXcmpWeight;
 	type CheckAssociatedRelayNumber = RelayNumberStrictlyIncreases;
+	type ConsensusHook = cumulus_pallet_aura_ext::FixedVelocityConsensusHook<
+		Runtime,
+		RELAY_CHAIN_SLOT_DURATION_MILLIS,
+		BLOCK_PROCESSING_VELOCITY,
+		UNINCLUDED_SEGMENT_CAPACITY,
+	>;
 }
 
 impl parachain_info::Config for Runtime {}
@@ -345,6 +351,8 @@ impl pallet_aura::Config for Runtime {
 	type DisabledValidators = ();
 	type MaxAuthorities = ConstU32<100_000>;
 	type AllowMultipleBlocksPerSlot = ConstBool<false>;
+	#[cfg(feature = "experimental")]
+	type SlotDuration = pallet_aura::MinimumPeriodTimesTwo<Self>;
 }
 
 parameter_types! {
@@ -488,7 +496,8 @@ impl pallet_bridge_messages::Config<WithBridgeHubWococoMessagesInstance> for Run
 
 	type SourceHeaderChain = SourceHeaderChainAdapter<WithBridgeHubWococoMessageBridge>;
 	type MessageDispatch =
-		XcmBlobMessageDispatch<OnBridgeHubRococoBlobDispatcher, Self::WeightInfo>;
+		XcmBlobMessageDispatch<OnBridgeHubRococoBlobDispatcher, Self::WeightInfo, ()>;
+	type OnMessagesDelivered = ();
 }
 
 /// Add XCM messages support for BridgeHubWococo to support Wococo->Rococo XCM messages
@@ -521,7 +530,8 @@ impl pallet_bridge_messages::Config<WithBridgeHubRococoMessagesInstance> for Run
 
 	type SourceHeaderChain = SourceHeaderChainAdapter<WithBridgeHubRococoMessageBridge>;
 	type MessageDispatch =
-		XcmBlobMessageDispatch<OnBridgeHubWococoBlobDispatcher, Self::WeightInfo>;
+		XcmBlobMessageDispatch<OnBridgeHubWococoBlobDispatcher, Self::WeightInfo, ()>;
+	type OnMessagesDelivered = ();
 }
 
 /// Allows collect and claim rewards for relayers
@@ -784,7 +794,7 @@ impl_runtime_apis! {
 			BridgeRococoGrandpa::best_finalized()
 		}
 		fn synced_headers_grandpa_info(
-		) -> Vec<bp_header_chain::HeaderGrandpaInfo<bp_rococo::Header>> {
+		) -> Vec<bp_header_chain::StoredHeaderGrandpaInfo<bp_rococo::Header>> {
 			BridgeRococoGrandpa::synced_headers_grandpa_info()
 		}
 	}
@@ -794,7 +804,7 @@ impl_runtime_apis! {
 			BridgeWococoGrandpa::best_finalized()
 		}
 		fn synced_headers_grandpa_info(
-		) -> Vec<bp_header_chain::HeaderGrandpaInfo<bp_wococo::Header>> {
+		) -> Vec<bp_header_chain::StoredHeaderGrandpaInfo<bp_wococo::Header>> {
 			BridgeWococoGrandpa::synced_headers_grandpa_info()
 		}
 	}
@@ -920,7 +930,8 @@ impl_runtime_apis! {
 		fn dispatch_benchmark(
 			config: frame_benchmarking::BenchmarkConfig
 		) -> Result<Vec<frame_benchmarking::BenchmarkBatch>, sp_runtime::RuntimeString> {
-			use frame_benchmarking::{Benchmarking, BenchmarkBatch, BenchmarkError, TrackedStorageKey};
+			use frame_benchmarking::{Benchmarking, BenchmarkBatch, BenchmarkError};
+			use sp_storage::TrackedStorageKey;
 
 			use frame_system_benchmarking::Pallet as SystemBench;
 			impl frame_system_benchmarking::Config for Runtime {
@@ -1221,33 +1232,9 @@ impl_runtime_apis! {
 	}
 }
 
-struct CheckInherents;
-
-impl cumulus_pallet_parachain_system::CheckInherents<Block> for CheckInherents {
-	fn check_inherents(
-		block: &Block,
-		relay_state_proof: &cumulus_pallet_parachain_system::RelayChainStateProof,
-	) -> sp_inherents::CheckInherentsResult {
-		let relay_chain_slot = relay_state_proof
-			.read_slot()
-			.expect("Could not read the relay chain slot from the proof");
-
-		let inherent_data =
-			cumulus_primitives_timestamp::InherentDataProvider::from_relay_chain_slot_and_duration(
-				relay_chain_slot,
-				sp_std::time::Duration::from_secs(6),
-			)
-			.create_inherent_data()
-			.expect("Could not create the timestamp inherent data");
-
-		inherent_data.check_extrinsics(block)
-	}
-}
-
 cumulus_pallet_parachain_system::register_validate_block! {
 	Runtime = Runtime,
 	BlockExecutor = cumulus_pallet_aura_ext::BlockExecutor::<Runtime, Executive>,
-	CheckInherents = CheckInherents,
 }
 
 #[cfg(test)]

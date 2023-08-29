@@ -17,14 +17,13 @@
 use crate::messages::{
 	source::FromBridgedChainMessagesDeliveryProof, target::FromBridgedChainMessagesProof,
 };
-use bp_messages::{InboundLaneData, LaneId, MessageNonce};
+use bp_messages::{target_chain::MessageDispatch, InboundLaneData, LaneId, MessageNonce};
 use frame_support::{
 	dispatch::CallableCallFor,
 	traits::{Get, IsSubType},
-	RuntimeDebug,
 };
 use pallet_bridge_messages::{Config, Pallet};
-use sp_runtime::transaction_validity::TransactionValidity;
+use sp_runtime::{transaction_validity::TransactionValidity, RuntimeDebug};
 use sp_std::ops::RangeInclusive;
 
 /// Generic info about a messages delivery/confirmation proof.
@@ -77,7 +76,12 @@ impl ReceiveMessagesProofInfo {
 	///
 	/// - or there are no bundled messages, but the inbound lane is blocked by too many unconfirmed
 	///   messages and/or unrewarded relayers.
-	fn is_obsolete(&self) -> bool {
+	fn is_obsolete(&self, is_dispatcher_active: bool) -> bool {
+		// if dispatcher is inactive, we don't accept any delivery transactions
+		if !is_dispatcher_active {
+			return true
+		}
+
 		// transactions with zero bundled nonces are not allowed, unless they're message
 		// delivery transactions, which brings reward confirmations required to unblock
 		// the lane
@@ -275,7 +279,9 @@ impl<
 
 	fn check_obsolete_call(&self) -> TransactionValidity {
 		match self.call_info() {
-			Some(CallInfo::ReceiveMessagesProof(proof_info)) if proof_info.is_obsolete() => {
+			Some(CallInfo::ReceiveMessagesProof(proof_info))
+				if proof_info.is_obsolete(T::MessageDispatch::is_active()) =>
+			{
 				log::trace!(
 					target: pallet_bridge_messages::LOG_TARGET,
 					"Rejecting obsolete messages delivery transaction: {:?}",
@@ -327,8 +333,8 @@ mod tests {
 		},
 		messages_call_ext::MessagesCallSubType,
 		mock::{
-			MaxUnconfirmedMessagesAtInboundLane, MaxUnrewardedRelayerEntriesAtInboundLane,
-			TestRuntime, ThisChainRuntimeCall,
+			DummyMessageDispatch, MaxUnconfirmedMessagesAtInboundLane,
+			MaxUnrewardedRelayerEntriesAtInboundLane, TestRuntime, ThisChainRuntimeCall,
 		},
 	};
 	use bp_messages::{DeliveredMessages, UnrewardedRelayer, UnrewardedRelayersState};
@@ -432,6 +438,18 @@ mod tests {
 			// 13..=15 => tx is rejected
 			deliver_message_10();
 			assert!(!validate_message_delivery(13, 15));
+		});
+	}
+
+	#[test]
+	fn extension_reject_call_when_dispatcher_is_inactive() {
+		sp_io::TestExternalities::new(Default::default()).execute_with(|| {
+			// when current best delivered is message#10 and we're trying to deliver message 11..=15
+			// => tx is accepted, but we have inactive dispatcher, so...
+			deliver_message_10();
+
+			DummyMessageDispatch::deactivate();
+			assert!(!validate_message_delivery(11, 15));
 		});
 	}
 

@@ -30,7 +30,7 @@ use frame_support::{
 	dispatch::{CallableCallFor, DispatchInfo, Dispatchable, PostDispatchInfo},
 	traits::IsSubType,
 	weights::Weight,
-	CloneNoBound, DefaultNoBound, EqNoBound, PartialEqNoBound, RuntimeDebug, RuntimeDebugNoBound,
+	CloneNoBound, DefaultNoBound, EqNoBound, PartialEqNoBound, RuntimeDebugNoBound,
 };
 use pallet_bridge_grandpa::{
 	CallSubType as GrandpaCallSubType, SubmitFinalityProofHelper, SubmitFinalityProofInfo,
@@ -51,7 +51,7 @@ use sp_runtime::{
 	transaction_validity::{
 		TransactionPriority, TransactionValidity, TransactionValidityError, ValidTransactionBuilder,
 	},
-	DispatchResult, FixedPointOperand,
+	DispatchResult, FixedPointOperand, RuntimeDebug,
 };
 use sp_std::{marker::PhantomData, vec, vec::Vec};
 
@@ -494,8 +494,7 @@ where
 		};
 
 		// compute total number of messages in transaction
-		let bundled_messages =
-			parsed_call.messages_call_info().bundled_messages().checked_len().unwrap_or(0);
+		let bundled_messages = parsed_call.messages_call_info().bundled_messages().saturating_len();
 
 		// a quick check to avoid invalid high-priority transactions
 		if bundled_messages > Runtime::MaxUnconfirmedMessagesAtInboundLane::get() {

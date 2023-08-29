@@ -23,18 +23,19 @@ mod verification;
 
 use crate::ChainWithGrandpa;
 pub use verification::{
-	equivocation::{EquivocationsCollector, Error as EquivocationsCollectorError},
+	equivocation::{EquivocationsCollector, GrandpaEquivocationsFinder},
 	optimizer::verify_and_optimize_justification,
 	strict::verify_justification,
-	AncestryChain, Error as JustificationVerificationError, PrecommitError,
+	AncestryChain, Error as JustificationVerificationError, JustificationVerificationContext,
+	PrecommitError,
 };
 
 use bp_runtime::{BlockNumberOf, Chain, HashOf, HeaderId};
 use codec::{Decode, Encode, MaxEncodedLen};
-use frame_support::{RuntimeDebug, RuntimeDebugNoBound};
+use frame_support::RuntimeDebugNoBound;
 use scale_info::TypeInfo;
 use sp_consensus_grandpa::{AuthorityId, AuthoritySignature};
-use sp_runtime::{traits::Header as HeaderT, SaturatedConversion};
+use sp_runtime::{traits::Header as HeaderT, RuntimeDebug, SaturatedConversion};
 use sp_std::prelude::*;
 
 /// A GRANDPA Justification is a proof that a given header was finalized
