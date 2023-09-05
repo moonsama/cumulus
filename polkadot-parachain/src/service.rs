@@ -1159,6 +1159,7 @@ where
 	sc_client_api::StateBackendFor<ParachainBackend, Block>: sp_api::StateBackend<BlakeTwo256>,
 	<<AuraId as AppCrypto>::Pair as Pair>::Signature:
 		TryFrom<Vec<u8>> + std::hash::Hash + sp_runtime::traits::Member + Codec,
+		<AuraId as AppCrypto>::Pair: std::marker::Sync, <AuraId as AppCrypto>::Pair: std::marker::Send
 {
 	start_node_impl::<RuntimeApi, _, _, _>(
 		parachain_config,
