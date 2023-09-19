@@ -22,7 +22,7 @@ use sc_telemetry::{telemetry, TelemetryHandle, CONSENSUS_INFO};
 use sp_api::{Core, ProvideRuntimeApi};
 use sp_application_crypto::AppPublic;
 use sp_blockchain::HeaderBackend;
-use sp_consensus::{EnableProofRecording, BlockOrigin, Environment, Error as ConsensusError, Proposal, Proposer};
+use sp_consensus::{EnableProofRecording, ProofRecording, SyncOracle, BlockOrigin, Environment, Error as ConsensusError, Proposal, Proposer};
 pub use sp_consensus_aura::{
 	digests::CompatibleDigestItem,
 	inherents::{InherentDataProvider, InherentType as AuraInherent, INHERENT_IDENTIFIER},
