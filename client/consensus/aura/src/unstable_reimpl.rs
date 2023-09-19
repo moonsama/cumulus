@@ -55,7 +55,7 @@ use sp_inherents::{CreateInherentDataProviders, InherentData, InherentDataProvid
 use sp_keystore::KeystorePtr;
 use sp_runtime::{
 	generic::Digest,
-	traits::{Block as BlockT, HashFor, Header as HeaderT, Member},
+	traits::{Block as BlockT, HashingFor, Header as HeaderT, Member},
 };
 use sp_state_machine::StorageChanges;
 use std::{convert::TryFrom, error::Error, fmt::Debug, hash::Hash, sync::Arc, time::Duration};
@@ -318,7 +318,7 @@ async fn create_inherent_data<B: BlockT>(
 
 fn seal<B: BlockT, T, P>(
 	pre_sealed: B,
-	storage_changes: StorageChanges<T, HashFor<B>>,
+	storage_changes: StorageChanges<T, HashingFor<B>>,
 	author_pub: &P::Public,
 	keystore: &KeystorePtr,
 ) -> Result<BlockImportParams<B, T>, Box<dyn Error>>
